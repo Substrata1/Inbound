@@ -2,6 +2,9 @@
 
 ## Configuration
 
+* The destination settings currently apply to patrol heli, cargo plane, and Chinook, and show where they are headed.
+* When **Show Oil Rig / Cargo Ship Labels** is set to true, the grid will be replaced with Oil Rig, Large Oil Rig, or Cargo Ship, where applicable.
+
 ```json
 {
   "Alerts (true/false)": {
@@ -30,9 +33,6 @@
   }
 }
 ```
-
-* The destination settings currently apply to patrol heli, cargo plane, and Chinook, and show where they are headed.
-* When **Show Oil Rig / Cargo Ship Labels** is set to true, the grid will be replaced with Oil Rig, Large Oil Rig, or Cargo Ship, where applicable.
 
 ## Localization
 
