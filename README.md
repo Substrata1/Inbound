@@ -4,12 +4,21 @@
 
 * The destination settings currently apply to patrol heli, cargo plane, and Chinook, and show where they are headed.
 * When **Show Oil Rig / Cargo Ship Labels** is set to true, the grid will be replaced with Oil Rig, Large Oil Rig, or Cargo Ship, where applicable. If you enable the 'Hide on Cargo Ship / Oil Rig' options, these messages will be hidden regardless.
+* In order to use a custom chat icon, you must enter a valid Steam ID. The associated profile picture will then be shown in chat messages. Default = 0.
+* For info on creating a Webhook for Discord Messages, check out [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks).
 
 ```json
 {
   "Notifications (true/false)": {
     "Chat Notifications": true,
     "Popup Notifications": false
+  },
+  "Discord Messages": {
+    "Enabled (true/false)": false,
+    "Webhook URL": ""
+  },
+  "Chat Icon": {
+    "Steam ID": 0
   },
   "Alerts (true/false)": {
     "Bradley APC Alerts": true,
@@ -21,7 +30,8 @@
     "Patrol Helicopter Alerts": true,
     "Player Hacking Crate Alerts": true,
     "Player Supply Signal Alerts": true,
-    "Supply Drop Alerts": true
+    "Supply Drop Alerts": true,
+    "Supply Drop Landed Alerts": true
   },
   "Grid (true/false)": {
     "Show Grid": true,
@@ -55,8 +65,10 @@
   "HackingCrate": "{0} is hacking a locked crate{1}",
   "SupplySignal": "{0} has deployed a supply signal{1}",
   "SupplyDrop": "Supply Drop has dropped{0}",
+  "SupplyDropLanded": "Supply Drop has landed{0}",
   "Location": " at {0}",
-  "LocationDestination": " and headed to {0}"
+  "LocationDestination": " and headed to {0}",
+  "DiscordMessage": ":arrow_lower_right:  **{0}**"
 }
 ```
 
