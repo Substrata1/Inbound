@@ -60,7 +60,7 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 6,
-    "Patch": 0
+    "Patch": 2
   }
 }
 ```

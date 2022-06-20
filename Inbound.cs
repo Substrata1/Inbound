@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.0")]
+    [Info("Inbound", "Substrata", "0.6.2")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -30,7 +30,7 @@ namespace Oxide.Plugins
         {
             NextTick(() =>
             {
-                if (heli == null) return;
+                if (heli == null || heli.IsDestroyed) return;
                 SendInboundMessage(Lang("PatrolHeli", null, Location(heli.transform.position, null), Destination(heli.myAI.destination)), configData.alerts.patrolHeli);
             });
         }
@@ -39,7 +39,7 @@ namespace Oxide.Plugins
         {
             timer.Once(2f, () =>
             {
-                if (ship == null) return;
+                if (ship == null || ship.IsDestroyed) return;
                 SendInboundMessage(Lang("CargoShip_", null, Location(ship.transform.position, null), Destination(TerrainMeta.Path.OceanPatrolFar[ship.GetClosestNodeToUs()])), configData.alerts.cargoShip);
             });
         }
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
         {
             timer.Once(2f, () =>
             {
-                if (ch47 == null) return;
+                if (ch47 == null || ch47.IsDestroyed) return;
                 SendInboundMessage(Lang("CH47", null, Location(ch47.transform.position, null), Destination(ch47.GetMoveTarget())), configData.alerts.ch47 && (!configData.misc.hideRigCrates || !ch47.ShouldLand()));
             });
         }
@@ -57,7 +57,7 @@ namespace Oxide.Plugins
         {
             NextTick(() =>
             {
-                if (apc == null) return;
+                if (apc == null || apc.IsDestroyed) return;
                 SendInboundMessage(Lang("BradleyAPC", null, Location(apc.transform.position, null)), configData.alerts.bradleyAPC);
             });
         }
@@ -67,7 +67,7 @@ namespace Oxide.Plugins
             if (arm == null || arm.IsOn()) return;
             NextTick(() =>
             {
-                if (arm == null || player == null || !arm.IsOn()) return;
+                if (player == null || arm == null || arm.IsDestroyed || !arm.IsOn()) return;
                 SendInboundMessage(Lang("Excavator_", null, player.displayName, Location(arm.transform.position, null, true)), configData.alerts.excavator);
             });
         }
@@ -76,7 +76,7 @@ namespace Oxide.Plugins
         {
             NextTick(() =>
             {
-                if (crate == null) return;
+                if (crate == null || crate.IsDestroyed) return;
                 SendInboundMessage(Lang("HackableCrateSpawned", null, Location(crate.transform.position, crate)), configData.alerts.hackableCrateSpawn && !HideCrateAlert(crate));
             });
         }
@@ -85,7 +85,7 @@ namespace Oxide.Plugins
         {
             NextTick(() =>
             {
-                if (player == null || crate == null || !crate.IsBeingHacked()) return;
+                if (player == null || crate == null || crate.IsDestroyed || !crate.IsBeingHacked()) return;
                 SendInboundMessage(Lang("HackingCrate", null, player.displayName, Location(crate.transform.position, crate)), configData.alerts.hackingCrate && !HideCrateAlert(crate));
             });
         }
