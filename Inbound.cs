@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.3")]
+    [Info("Inbound", "Substrata", "0.6.4")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -26,7 +26,7 @@ namespace Oxide.Plugins
 
         void OnServerInitialized(bool initial) => InitVariables();
 
-        void OnEntitySpawned(BaseHelicopter heli)
+        void OnEntitySpawned(PatrolHelicopter heli)
         {
             NextTick(() =>
             {
