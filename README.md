@@ -22,6 +22,7 @@
   "Alerts": {
     "Patrol Helicopter Alerts": true,
     "Cargo Ship Alerts": true,
+    "Cargo Ship Harbor Alerts": true,
     "Cargo Plane Alerts": true,
     "CH47 Chinook Alerts": true,
     "Bradley APC Alerts": true,
@@ -60,7 +61,7 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 6,
-    "Patch": 3
+    "Patch": 5
   }
 }
 ```
@@ -76,6 +77,9 @@
 {
   "PatrolHeli": "Patrol Helicopter inbound{0}{1}",
   "CargoShip_": "Cargo Ship inbound{0}{1}",
+  "CargoShipApproachHarbor": "Cargo Ship is approaching the harbor{0}",
+  "CargoShipAtHarbor": "Cargo Ship has docked at the harbor{0}",
+  "CargoShipLeaveHarbor": "Cargo Ship is leaving the harbor{0}",
   "CargoPlane_": "{0}Cargo Plane inbound{1}{2}",
   "CH47": "Chinook inbound{0}{1}",
   "BradleyAPC": "Bradley APC inbound{0}",

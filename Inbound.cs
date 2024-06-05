@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.4")]
+    [Info("Inbound", "Substrata", "0.6.5")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -20,6 +20,7 @@ namespace Oxide.Plugins
         // Compatibility
         AirdropPrecision, FancyDrop;
 
+        bool initialized;
         float worldSize; int xGridNum; int zGridNum; float gridBottom; float gridTop; float gridLeft; float gridRight;
         bool hasOilRig; bool hasLargeRig; Vector3 oilRigPos; Vector3 largeRigPos; bool hasExcavator; Vector3 excavatorPos;
         ulong chatIconID; string webhookURL;
@@ -28,42 +29,84 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(PatrolHelicopter heli)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (heli == null || heli.IsDestroyed) return;
-                SendInboundMessage(Lang("PatrolHeli", null, Location(heli.transform.position, null), Destination(heli.myAI.destination)), configData.alerts.patrolHeli);
+                SendInboundMessage(Lang("PatrolHeli", null, Location(heli.transform.position), Destination(heli.myAI.destination)), configData.alerts.patrolHeli);
             });
         }
 
         void OnEntitySpawned(CargoShip ship)
         {
-            timer.Once(2f, () =>
+            if (!initialized) return;
+
+            timer.Once(3f, () =>
             {
                 if (ship == null || ship.IsDestroyed) return;
-                SendInboundMessage(Lang("CargoShip_", null, Location(ship.transform.position, null), Destination(TerrainMeta.Path.OceanPatrolFar[ship.GetClosestNodeToUs()])), configData.alerts.cargoShip);
+
+                string destination = string.Empty;
+                if (TerrainMeta.Path.OceanPatrolFar != null)
+                {
+                    int targetNodeIndex = ship.targetNodeIndex != -1 ? ship.targetNodeIndex : ship.GetClosestNodeToUs();
+                    if (targetNodeIndex != -1 && TerrainMeta.Path.OceanPatrolFar.Count > targetNodeIndex)
+                    {
+                        destination = Destination(TerrainMeta.Path.OceanPatrolFar[targetNodeIndex]);
+                    }
+                }
+
+                SendInboundMessage(Lang("CargoShip_", null, Location(ship.transform.position), destination), configData.alerts.cargoShip);
             });
+        }
+
+        void OnCargoShipHarborApproach(CargoShip ship)
+        {
+            if (!initialized || ship == null || ship.IsDestroyed) return;
+
+            SendInboundMessage(Lang("CargoShipApproachHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
+        }
+
+        void OnCargoShipHarborArrived(CargoShip ship)
+        {
+            if (!initialized || ship == null || ship.IsDestroyed) return;
+
+            SendInboundMessage(Lang("CargoShipAtHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
+        }
+
+        void OnCargoShipHarborLeave(CargoShip ship)
+        {
+            if (!initialized || ship == null || ship.IsDestroyed) return;
+
+            SendInboundMessage(Lang("CargoShipLeaveHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
         }
 
         void OnEntitySpawned(CH47HelicopterAIController ch47)
         {
+            if (!initialized) return;
+
             timer.Once(2f, () =>
             {
                 if (ch47 == null || ch47.IsDestroyed) return;
-                SendInboundMessage(Lang("CH47", null, Location(ch47.transform.position, null), Destination(ch47.GetMoveTarget())), configData.alerts.ch47 && (!configData.misc.hideRigCrates || !ch47.ShouldLand()));
+                SendInboundMessage(Lang("CH47", null, Location(ch47.transform.position), Destination(ch47.GetMoveTarget())), configData.alerts.ch47 && (!configData.misc.hideRigCrates || !ch47.ShouldLand()));
             });
         }
 
         void OnBradleyApcInitialize(BradleyAPC apc)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (apc == null || apc.IsDestroyed) return;
-                SendInboundMessage(Lang("BradleyAPC", null, Location(apc.transform.position, null)), configData.alerts.bradleyAPC);
+                SendInboundMessage(Lang("BradleyAPC", null, Location(apc.transform.position)), configData.alerts.bradleyAPC);
             });
         }
 
         void OnExcavatorResourceSet(ExcavatorArm arm, string resourceName, BasePlayer player)
         {
+            if (!initialized) return;
+
             if (arm == null || arm.IsOn()) return;
             NextTick(() =>
             {
@@ -74,6 +117,8 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(HackableLockedCrate crate)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (crate == null || crate.IsDestroyed) return;
@@ -83,6 +128,8 @@ namespace Oxide.Plugins
 
         void CanHackCrate(BasePlayer player, HackableLockedCrate crate)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (player == null || crate == null || crate.IsDestroyed || !crate.IsBeingHacked()) return;
@@ -102,6 +149,8 @@ namespace Oxide.Plugins
 
         void OnExplosiveThrown(BasePlayer player, SupplySignal signal)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (player == null || signal == null) return;
@@ -128,35 +177,41 @@ namespace Oxide.Plugins
 
         void OnExcavatorSuppliesRequested(ExcavatorSignalComputer computer, BasePlayer player, CargoPlane plane)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (player == null || plane == null) return;
                 if (SupplyPlayerCompatible())
                     calledDrops.Add(new CalledDrop() { _iplayer = player.IPlayer, _plane = plane });
-                SendInboundMessage(Lang("ExcavatorSupplyRequest", null, player.displayName, Location(player.transform.position, null)), configData.alerts.excavatorSupply);
+                SendInboundMessage(Lang("ExcavatorSupplyRequest", null, player.displayName, Location(player.transform.position)), configData.alerts.excavatorSupply);
             });
         }
 
         void OnAirdrop(CargoPlane plane, Vector3 dest)
         {
+            if (!initialized) return;
+
             timer.Once(2f, () =>
             {
                 if (plane == null) return;
                 CalledDrop calledDrop = GetCalledDrop(plane, null);
-                SendInboundMessage(Lang("CargoPlane_", null, SupplyDropPlayer(calledDrop), Location(plane.transform.position, null), Destination(dest)), configData.alerts.cargoPlane && !HideSupplyAlert(calledDrop));
+                SendInboundMessage(Lang("CargoPlane_", null, SupplyDropPlayer(calledDrop), Location(plane.transform.position), Destination(dest)), configData.alerts.cargoPlane && !HideSupplyAlert(calledDrop));
             });
         }
 
         private HashSet<ulong> droppedDrops = new HashSet<ulong>();
         void OnSupplyDropDropped(SupplyDrop drop, CargoPlane plane)
         {
+            if (!initialized) return;
+
             NextTick(() =>
             {
                 if (drop == null || droppedDrops.Contains(drop.net.ID.Value)) return;
                 droppedDrops.Add(drop.net.ID.Value);
                 CalledDrop calledDrop = GetCalledDrop(plane, null);
                 if (calledDrop != null) calledDrop._drop = drop;
-                SendInboundMessage(Lang("SupplyDropDropped", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position, null)), configData.alerts.supplyDrop && !HideSupplyAlert(calledDrop));
+                SendInboundMessage(Lang("SupplyDropDropped", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position)), configData.alerts.supplyDrop && !HideSupplyAlert(calledDrop));
             });
         }
 
@@ -165,10 +220,10 @@ namespace Oxide.Plugins
         private HashSet<ulong> landedDrops = new HashSet<ulong>();
         void OnSupplyDropLanded(SupplyDrop drop)
         {
-            if (drop == null || landedDrops.Contains(drop.net.ID.Value)) return;
+            if (!initialized || drop == null || landedDrops.Contains(drop.net.ID.Value)) return;
             landedDrops.Add(drop.net.ID.Value);
             CalledDrop calledDrop = GetCalledDrop(null, drop);
-            SendInboundMessage(Lang("SupplyDropLanded_", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position, null)), configData.alerts.supplyDropLand && !HideSupplyAlert(calledDrop));
+            SendInboundMessage(Lang("SupplyDropLanded_", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position)), configData.alerts.supplyDropLand && !HideSupplyAlert(calledDrop));
         }
 
         void OnEntityKill(SupplyDrop drop)
@@ -217,6 +272,8 @@ namespace Oxide.Plugins
         void SendDiscordMessage(string msg)
         {
             string dMsg = Lang("DiscordMessage_", null, msg);
+            if (!string.IsNullOrWhiteSpace(dMsg)) return;
+
             if (configData.discordMessages.embedded)
             {
                 object fields = new[]
@@ -243,7 +300,7 @@ namespace Oxide.Plugins
         #endregion
 
         #region Helpers
-        private string Location(Vector3 pos, BaseEntity entity, bool hideExc = false)
+        private string Location(Vector3 pos, BaseEntity entity = null, bool hideExc = false)
         {
             string location = GetLocation(pos, entity, hideExc);
             return !string.IsNullOrEmpty(location) ? Lang("Location", null, location) : string.Empty;
@@ -289,6 +346,17 @@ namespace Oxide.Plugins
             }
 
             return sb.ToString();
+        }
+
+        string GetHarborLocation(CargoShip cargoShip)
+        {
+            if (cargoShip.harborIndex != -1 && CargoShip.harbors.Count > cargoShip.harborIndex)
+            {
+                var currentHarbor = CargoShip.harbors[cargoShip.harborIndex];
+                return Location(currentHarbor.harborTransform.position);
+            }
+
+            return string.Empty;
         }
 
         string GetGrid(Vector3 pos) // Credit: yetzt & JakeRich
@@ -337,7 +405,7 @@ namespace Oxide.Plugins
             return (configData.misc.hideCargoCrates && IsAtCargoShip(crate)) || (configData.misc.hideRigCrates && (IsAtOilRig(pos) || IsAtLargeRig(pos)));
         }
 
-        private string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset).*?>|<\/?(b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)>";
+        const string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset).*?>|<\/?(b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)>";
         private bool IsAtOilRig(Vector3 pos) => hasOilRig && Vector3Ex.Distance2D(oilRigPos, pos) <= 60f;
         private bool IsAtLargeRig(Vector3 pos) => hasLargeRig && Vector3Ex.Distance2D(largeRigPos, pos) <= 75f;
         private bool IsAtCargoShip(BaseEntity entity) => entity?.GetComponentInParent<CargoShip>();
@@ -407,6 +475,8 @@ namespace Oxide.Plugins
 
             if (!SupplyPlayerCompatible() && (configData.misc.showSupplyPlayer || configData.misc.hideCalledSupply || configData.misc.hideRandomSupply))
                 PrintWarning("The 'Supply Drop Player' options are not currently compatible with Fancy Drop or Aidrop Precision. Using defaults (false).");
+
+            initialized = true;
         }
         #endregion
 
@@ -466,6 +536,8 @@ namespace Oxide.Plugins
                 public bool patrolHeli { get; set; }
                 [JsonProperty(PropertyName = "Cargo Ship Alerts")]
                 public bool cargoShip { get; set; }
+                [JsonProperty(PropertyName = "Cargo Ship Harbor Alerts")]
+                public bool cargoShipHarbor { get; set; }
                 [JsonProperty(PropertyName = "Cargo Plane Alerts")]
                 public bool cargoPlane { get; set; }
                 [JsonProperty(PropertyName = "CH47 Chinook Alerts")]
@@ -586,6 +658,7 @@ namespace Oxide.Plugins
                 {
                     patrolHeli = true,
                     cargoShip = true,
+                    cargoShipHarbor = true,
                     cargoPlane = true,
                     ch47 = true,
                     bradleyAPC = true,
@@ -662,6 +735,10 @@ namespace Oxide.Plugins
 
                 BackupLang();
             }
+            if (configData.Version < new Core.VersionNumber(0, 6, 5))
+            {
+                configData.alerts.cargoShipHarbor = baseConfig.alerts.cargoShipHarbor;
+            }
             configData.Version = Version;
             PrintWarning("Config update completed!");
         }
@@ -694,6 +771,9 @@ namespace Oxide.Plugins
             {
                 ["PatrolHeli"] = "Patrol Helicopter inbound{0}{1}",
                 ["CargoShip_"] = "Cargo Ship inbound{0}{1}",
+                ["CargoShipApproachHarbor"] = "Cargo Ship is approaching the harbor{0}",
+                ["CargoShipAtHarbor"] = "Cargo Ship has docked at the harbor{0}",
+                ["CargoShipLeaveHarbor"] = "Cargo Ship is leaving the harbor{0}",
                 ["CargoPlane_"] = "{0}Cargo Plane inbound{1}{2}",
                 ["CH47"] = "Chinook inbound{0}{1}",
                 ["BradleyAPC"] = "Bradley APC inbound{0}",
