@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.5")]
+    [Info("Inbound", "Substrata", "0.6.6")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -272,7 +272,7 @@ namespace Oxide.Plugins
         void SendDiscordMessage(string msg)
         {
             string dMsg = Lang("DiscordMessage_", null, msg);
-            if (!string.IsNullOrWhiteSpace(dMsg)) return;
+            if (string.IsNullOrWhiteSpace(dMsg)) return;
 
             if (configData.discordMessages.embedded)
             {

@@ -61,7 +61,7 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 6,
-    "Patch": 5
+    "Patch": 6
   }
 }
 ```
