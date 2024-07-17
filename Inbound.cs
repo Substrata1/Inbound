@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.6")]
+    [Info("Inbound", "Substrata", "0.6.7")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -100,6 +100,17 @@ namespace Oxide.Plugins
             {
                 if (apc == null || apc.IsDestroyed) return;
                 SendInboundMessage(Lang("BradleyAPC", null, Location(apc.transform.position)), configData.alerts.bradleyAPC);
+            });
+        }
+
+        void OnEntitySpawned(TravellingVendor travellingVendor)
+        {
+            if (!initialized) return;
+
+            NextTick(() =>
+            {
+                if (travellingVendor == null || travellingVendor.IsDestroyed) return;
+                SendInboundMessage(Lang("TravellingVendor", null, Location(travellingVendor.transform.position)), configData.alerts.travellingVendor);
             });
         }
 
@@ -544,6 +555,8 @@ namespace Oxide.Plugins
                 public bool ch47 { get; set; }
                 [JsonProperty(PropertyName = "Bradley APC Alerts")]
                 public bool bradleyAPC { get; set; }
+                [JsonProperty(PropertyName = "Travelling Vendor Alerts")]
+                public bool travellingVendor { get; set; }
                 [JsonProperty(PropertyName = "Excavator Activated Alerts")]
                 public bool excavator { get; set; }
                 [JsonProperty(PropertyName = "Excavator Supply Request Alerts")]
@@ -662,6 +675,7 @@ namespace Oxide.Plugins
                     cargoPlane = true,
                     ch47 = true,
                     bradleyAPC = true,
+                    travellingVendor = true,
                     excavator = true,
                     excavatorSupply = true,
                     hackableCrateSpawn = true,
@@ -739,6 +753,10 @@ namespace Oxide.Plugins
             {
                 configData.alerts.cargoShipHarbor = baseConfig.alerts.cargoShipHarbor;
             }
+            if (configData.Version < new Core.VersionNumber(0, 6, 7))
+            {
+                configData.alerts.travellingVendor = baseConfig.alerts.travellingVendor;
+            }
             configData.Version = Version;
             PrintWarning("Config update completed!");
         }
@@ -777,6 +795,7 @@ namespace Oxide.Plugins
                 ["CargoPlane_"] = "{0}Cargo Plane inbound{1}{2}",
                 ["CH47"] = "Chinook inbound{0}{1}",
                 ["BradleyAPC"] = "Bradley APC inbound{0}",
+                ["TravellingVendor"] = "Travelling Vendor inbound{0}",
                 ["Excavator_"] = "{0} has activated The Excavator{1}",
                 ["ExcavatorSupplyRequest"] = "{0} has requested a supply drop{1}",
                 ["HackableCrateSpawned"] = "Hackable Crate has spawned{0}",

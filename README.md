@@ -26,6 +26,7 @@
     "Cargo Plane Alerts": true,
     "CH47 Chinook Alerts": true,
     "Bradley APC Alerts": true,
+    "Travelling Vendor Alerts": true,
     "Excavator Activated Alerts": true,
     "Excavator Supply Request Alerts": true,
     "Hackable Crate Alerts": true,
@@ -61,7 +62,7 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 6,
-    "Patch": 6
+    "Patch": 7
   }
 }
 ```
@@ -83,6 +84,7 @@
   "CargoPlane_": "{0}Cargo Plane inbound{1}{2}",
   "CH47": "Chinook inbound{0}{1}",
   "BradleyAPC": "Bradley APC inbound{0}",
+  "TravellingVendor": "Travelling Vendor inbound{0}",
   "Excavator_": "{0} has activated The Excavator{1}",
   "ExcavatorSupplyRequest": "{0} has requested a supply drop{1}",
   "HackableCrateSpawned": "Hackable Crate has spawned{0}",
