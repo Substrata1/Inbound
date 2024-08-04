@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.7")]
+    [Info("Inbound", "Substrata", "0.6.8")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -446,16 +446,16 @@ namespace Oxide.Plugins
                     excavatorPos = monument.transform.localToWorldMatrix.MultiplyPoint3x4(new Vector3(20f,0,-30f));
                     continue;
                 }
-                if (name == "OilrigAI")
-                {
-                    hasOilRig = true;
-                    oilRigPos = monument.transform.position;
-                    continue;
-                }
-                if (name == "OilrigAI2")
+                if (name == "assets/bundled/prefabs/autospawn/monument/offshore/oilrig_1.prefab")
                 {
                     hasLargeRig = true;
                     largeRigPos = monument.transform.position;
+                    continue;
+                }
+                if (name == "assets/bundled/prefabs/autospawn/monument/offshore/oilrig_2.prefab")
+                {
+                    hasOilRig = true;
+                    oilRigPos = monument.transform.position;
                     continue;
                 }
             }
