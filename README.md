@@ -41,7 +41,6 @@
     "Show 'Cargo Ship' Label": true,
     "Show 'Excavator' Label": true,
     "Hide Unmarked Grids": true,
-    "Grid Offset": false,
     "Show Coordinates": false,
     "Hide Y Coordinate": false,
     "Hide Coordinate Decimals": false
@@ -62,14 +61,13 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 6,
-    "Patch": 8
+    "Patch": 9
   }
 }
 ```
 
 - **Show Supply Drop Player** will add the name of the player who called in a Cargo Plane / Supply Drop when those alerts are shown. This can be further tweaked in the language file.
 - **Hide Player-Called Supply Drop Messages** will hide alerts for Cargo Planes and Supply Drops that have been called in by a player, with a supply signal or at the Excavator signal computer. **Hide Random Supply Drop Messages** will hide alerts for those that have not.
-- **Grid Offset** will offset the grid number by 1, if needed. See Known Issues for more info.
 - For info on creating a Webhook for Discord Messages, check out [Intro to Webhooks](https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks).
 
 ## Localization
@@ -104,7 +102,6 @@
 ## Known Issues
 
 - The **Show Supply Drop Player**, **Hide Player-Called Supply Drop Messages**, and **Hide Random Supply Drop Messages** options do not currently work with any plugins that kill & respawn the Cargo Plane or Supply Drop. These include Fancy Drop, Airdrop Precision, and possibly others. Compatibility for these can hopefully be added at some point.
-- On some map sizes (3500, for example), the grid number may be off by 1. If this is the case for you, you can use the **Grid Offset** option to correct it. This is on Facepunch to fix.
 - Unmarked grids to the left of the map will not show, as there is currently no good way of labeling these.
 
 ## Credits

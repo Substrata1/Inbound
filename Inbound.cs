@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.8")]
+    [Info("Inbound", "Substrata", "0.6.9")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -21,7 +21,7 @@ namespace Oxide.Plugins
         AirdropPrecision, FancyDrop;
 
         bool initialized;
-        float worldSize; int xGridNum; int zGridNum; float gridBottom; float gridTop; float gridLeft; float gridRight;
+        float worldSize; int cellCount; float cellSize;  float gridBottom; float gridTop; float gridLeft; float gridRight;
         bool hasOilRig; bool hasLargeRig; Vector3 oilRigPos; Vector3 largeRigPos; bool hasExcavator; Vector3 excavatorPos;
         ulong chatIconID; string webhookURL;
 
@@ -370,22 +370,27 @@ namespace Oxide.Plugins
             return string.Empty;
         }
 
-        string GetGrid(Vector3 pos) // Credit: yetzt & JakeRich
+        string GetGrid(Vector3 pos)
         {
-            float x = Mathf.Floor((pos.x+(worldSize/2)) / 146.3f);
-            float zGrids = configData.location.gridOffset ? Mathf.Floor(worldSize/146.3f) : Mathf.Floor(worldSize/146.3f)-1;
-            float z = zGrids-Mathf.Floor((pos.z+(worldSize/2)) / 146.3f);
+            int x = Mathf.FloorToInt((pos.x + (worldSize / 2)) / cellSize);
+            int z = Mathf.FloorToInt((pos.z + (worldSize / 2)) / cellSize);
 
-            int num = (int)x;
-            int num2 = Mathf.FloorToInt((float)(num / 26));
-            int num3 = num % 26;
-            string text = string.Empty;
-            if (num2 > 0)
+            string columnLabel = string.Empty;
+            int num = x / 26;
+
+            if (num > 0)
             {
-                for (int i = 0; i < num2; i++)
-                    text += Convert.ToChar(65 + i);
+                for (int i = 0; i < num; i++)
+                {
+                    columnLabel += Convert.ToChar(65 + i);
+                }
             }
-            return (text + Convert.ToChar(65 + num3))+z;
+
+            columnLabel += Convert.ToChar(65 + (x % 26));
+
+            int row = cellCount - 1 - z;
+
+            return $"{columnLabel}{row}";
         }
 
         private CalledDrop GetCalledDrop(CargoPlane plane, SupplyDrop drop)
@@ -416,7 +421,7 @@ namespace Oxide.Plugins
             return (configData.misc.hideCargoCrates && IsAtCargoShip(crate)) || (configData.misc.hideRigCrates && (IsAtOilRig(pos) || IsAtLargeRig(pos)));
         }
 
-        const string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset).*?>|<\/?(b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)>";
+        const string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset|b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)(\s*=[^>]*?)?\s*\/?>";
         private bool IsAtOilRig(Vector3 pos) => hasOilRig && Vector3Ex.Distance2D(oilRigPos, pos) <= 60f;
         private bool IsAtLargeRig(Vector3 pos) => hasLargeRig && Vector3Ex.Distance2D(largeRigPos, pos) <= 75f;
         private bool IsAtCargoShip(BaseEntity entity) => entity?.GetComponentInParent<CargoShip>();
@@ -428,13 +433,13 @@ namespace Oxide.Plugins
         {
             // Grid
             worldSize = TerrainMeta.Size.x;
-            xGridNum = (int)Mathf.Ceil(worldSize / 146.3f);
-            zGridNum = (int)Mathf.Floor(worldSize / 146.3f);
-            if (configData.location.gridOffset) zGridNum += 1;
+            cellCount = Mathf.FloorToInt((worldSize * 7) / 1024);
+            cellSize = worldSize / cellCount;
+
             gridBottom = TerrainMeta.Position.z;
-            gridTop = gridBottom + (146.3f * zGridNum);
+            gridTop = gridBottom + (cellSize * cellCount);
             gridLeft = TerrainMeta.Position.x;
-            gridRight = gridLeft + (146.3f * xGridNum);
+            gridRight = gridLeft + (cellSize * cellCount);
 
             // Monuments
             foreach (MonumentInfo monument in TerrainMeta.Path.Monuments)
@@ -585,8 +590,6 @@ namespace Oxide.Plugins
                 public bool showExcavator { get; set; }
                 [JsonProperty(PropertyName = "Hide Unmarked Grids")]
                 public bool hideOffGrid { get; set; }
-                [JsonProperty(PropertyName = "Grid Offset")]
-                public bool gridOffset { get; set; }
                 [JsonProperty(PropertyName = "Show Coordinates")]
                 public bool showCoords { get; set; }
                 [JsonProperty(PropertyName = "Hide Y Coordinate")]
@@ -691,7 +694,6 @@ namespace Oxide.Plugins
                     showCargoShip = true,
                     showExcavator = true,
                     hideOffGrid = true,
-                    gridOffset = false,
                     showCoords = false,
                     hideYCoord = false,
                     hideCoordDecimals = false
