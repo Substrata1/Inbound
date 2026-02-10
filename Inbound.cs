@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.6.9")]
+    [Info("Inbound", "Substrata", "0.7.0")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -20,17 +20,36 @@ namespace Oxide.Plugins
         // Compatibility
         AirdropPrecision, FancyDrop;
 
-        bool initialized;
-        float worldSize; int cellCount; float cellSize;  float gridBottom; float gridTop; float gridLeft; float gridRight;
-        bool hasOilRig; bool hasLargeRig; Vector3 oilRigPos; Vector3 largeRigPos; bool hasExcavator; Vector3 excavatorPos;
-        ulong chatIconID; string webhookURL;
+        private DeepSeaManager deepSeaManager;
 
-        void OnServerInitialized(bool initial) => InitVariables();
+        private HashSet<Vector3> oilRigPositions = new HashSet<Vector3>();
+        private HashSet<Vector3> largeOilRigPositions = new HashSet<Vector3>();
+        private HashSet<Vector3> excavatorPositions = new HashSet<Vector3>();
+
+        private int cellCount; private float cellSize; private float gridBottom; private float gridTop; private float gridLeft; private float gridRight;
+        private int deepSeaCellCount; private float deepSeaCellSize; private float deepSeaGridBottom; private float deepSeaGridTop; private float deepSeaGridLeft; private float deepSeaGridRight;
+
+        private ulong chatIconID;
+        private string webhookURL;
+
+        private const string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset|b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)(\s*=[^>]*?)?\s*\/?>";
+
+        void Init()
+        {
+            Unsubscribe(nameof(OnEntitySpawned));
+            Unsubscribe(nameof(OnEntityKill));
+        }
+
+        void OnServerInitialized(bool initial)
+        {
+            InitVariables();
+
+            Subscribe(nameof(OnEntitySpawned));
+            Subscribe(nameof(OnEntityKill));
+        }
 
         void OnEntitySpawned(PatrolHelicopter heli)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (heli == null || heli.IsDestroyed) return;
@@ -38,53 +57,46 @@ namespace Oxide.Plugins
             });
         }
 
-        void OnEntitySpawned(CargoShip ship)
+        void OnEntitySpawned(CargoShip cargoShip)
         {
-            if (!initialized) return;
-
             timer.Once(3f, () =>
             {
-                if (ship == null || ship.IsDestroyed) return;
+                if (cargoShip == null || cargoShip.IsDestroyed) return;
 
                 string destination = string.Empty;
                 if (TerrainMeta.Path.OceanPatrolFar != null)
                 {
-                    int targetNodeIndex = ship.targetNodeIndex != -1 ? ship.targetNodeIndex : ship.GetClosestNodeToUs();
+                    int targetNodeIndex = cargoShip.targetNodeIndex != -1 ? cargoShip.targetNodeIndex : cargoShip.GetClosestNodeToUs();
                     if (targetNodeIndex != -1 && TerrainMeta.Path.OceanPatrolFar.Count > targetNodeIndex)
                     {
                         destination = Destination(TerrainMeta.Path.OceanPatrolFar[targetNodeIndex]);
                     }
                 }
 
-                SendInboundMessage(Lang("CargoShip_", null, Location(ship.transform.position), destination), configData.alerts.cargoShip);
+                SendInboundMessage(Lang("CargoShip_", null, Location(cargoShip.transform.position), destination), configData.alerts.cargoShip);
             });
         }
 
-        void OnCargoShipHarborApproach(CargoShip ship)
+        void OnCargoShipHarborApproach(CargoShip cargoShip)
         {
-            if (!initialized || ship == null || ship.IsDestroyed) return;
-
-            SendInboundMessage(Lang("CargoShipApproachHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
+            if (cargoShip == null || cargoShip.IsDestroyed) return;
+            SendInboundMessage(Lang("CargoShipApproachHarbor", null, GetHarborLocation(cargoShip)), configData.alerts.cargoShipHarbor);
         }
 
-        void OnCargoShipHarborArrived(CargoShip ship)
+        void OnCargoShipHarborArrived(CargoShip cargoShip)
         {
-            if (!initialized || ship == null || ship.IsDestroyed) return;
-
-            SendInboundMessage(Lang("CargoShipAtHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
+            if (cargoShip == null || cargoShip.IsDestroyed) return;
+            SendInboundMessage(Lang("CargoShipAtHarbor", null, GetHarborLocation(cargoShip)), configData.alerts.cargoShipHarbor);
         }
 
-        void OnCargoShipHarborLeave(CargoShip ship)
+        void OnCargoShipHarborLeave(CargoShip cargoShip)
         {
-            if (!initialized || ship == null || ship.IsDestroyed) return;
-
-            SendInboundMessage(Lang("CargoShipLeaveHarbor", null, GetHarborLocation(ship)), configData.alerts.cargoShipHarbor);
+            if (cargoShip == null || cargoShip.IsDestroyed) return;
+            SendInboundMessage(Lang("CargoShipLeaveHarbor", null, GetHarborLocation(cargoShip)), configData.alerts.cargoShipHarbor);
         }
 
         void OnEntitySpawned(CH47HelicopterAIController ch47)
         {
-            if (!initialized) return;
-
             timer.Once(2f, () =>
             {
                 if (ch47 == null || ch47.IsDestroyed) return;
@@ -94,8 +106,6 @@ namespace Oxide.Plugins
 
         void OnBradleyApcInitialize(BradleyAPC apc)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (apc == null || apc.IsDestroyed) return;
@@ -105,8 +115,6 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(TravellingVendor travellingVendor)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (travellingVendor == null || travellingVendor.IsDestroyed) return;
@@ -114,10 +122,31 @@ namespace Oxide.Plugins
             });
         }
 
+        void OnDeepSeaOpened(DeepSeaManager deepSea)
+        {
+            if (deepSea == null) return;
+
+            deepSeaManager = deepSea;
+
+            NextTick(() =>
+            {
+                if (deepSea == null)
+                {
+                    deepSeaManager = null;
+                    return;
+                }
+
+                if (deepSea.IsOpen())
+                {
+                    SendInboundMessage(Lang("DeepSeaOpen", null), configData.alerts.deepSea);
+                }
+            });
+        }
+
+        void OnDeepSeaClosed(DeepSeaManager deepSea) => deepSeaManager = null;
+
         void OnExcavatorResourceSet(ExcavatorArm arm, string resourceName, BasePlayer player)
         {
-            if (!initialized) return;
-
             if (arm == null || arm.IsOn()) return;
             NextTick(() =>
             {
@@ -128,8 +157,6 @@ namespace Oxide.Plugins
 
         void OnEntitySpawned(HackableLockedCrate crate)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (crate == null || crate.IsDestroyed) return;
@@ -139,8 +166,6 @@ namespace Oxide.Plugins
 
         void CanHackCrate(BasePlayer player, HackableLockedCrate crate)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (player == null || crate == null || crate.IsDestroyed || !crate.IsBeingHacked()) return;
@@ -160,13 +185,15 @@ namespace Oxide.Plugins
 
         void OnExplosiveThrown(BasePlayer player, SupplySignal signal)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (player == null || signal == null) return;
+
                 if (SupplyPlayerCompatible())
+                {
                     calledDrops.Add(new CalledDrop() { _iplayer = player.IPlayer, _signal = signal });
+                }
+
                 SendInboundMessage(Lang("SupplySignal", null, player.displayName, Location(player.transform.position, player)), configData.alerts.supplySignal);
             });
         }
@@ -176,6 +203,7 @@ namespace Oxide.Plugins
         void OnCargoPlaneSignaled(CargoPlane plane, SupplySignal signal)
         {
             if (plane == null || signal == null) return;
+
             foreach (var calledDrop in calledDrops)
             {
                 if (calledDrop._signal == signal)
@@ -188,25 +216,27 @@ namespace Oxide.Plugins
 
         void OnExcavatorSuppliesRequested(ExcavatorSignalComputer computer, BasePlayer player, CargoPlane plane)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (player == null || plane == null) return;
+
                 if (SupplyPlayerCompatible())
+                {
                     calledDrops.Add(new CalledDrop() { _iplayer = player.IPlayer, _plane = plane });
+                }
+                    
                 SendInboundMessage(Lang("ExcavatorSupplyRequest", null, player.displayName, Location(player.transform.position)), configData.alerts.excavatorSupply);
             });
         }
 
         void OnAirdrop(CargoPlane plane, Vector3 dest)
         {
-            if (!initialized) return;
-
             timer.Once(2f, () =>
             {
                 if (plane == null) return;
+
                 CalledDrop calledDrop = GetCalledDrop(plane, null);
+
                 SendInboundMessage(Lang("CargoPlane_", null, SupplyDropPlayer(calledDrop), Location(plane.transform.position), Destination(dest)), configData.alerts.cargoPlane && !HideSupplyAlert(calledDrop));
             });
         }
@@ -214,14 +244,18 @@ namespace Oxide.Plugins
         private HashSet<ulong> droppedDrops = new HashSet<ulong>();
         void OnSupplyDropDropped(SupplyDrop drop, CargoPlane plane)
         {
-            if (!initialized) return;
-
             NextTick(() =>
             {
                 if (drop == null || droppedDrops.Contains(drop.net.ID.Value)) return;
+
                 droppedDrops.Add(drop.net.ID.Value);
+
                 CalledDrop calledDrop = GetCalledDrop(plane, null);
-                if (calledDrop != null) calledDrop._drop = drop;
+                if (calledDrop != null)
+                {
+                    calledDrop._drop = drop;
+                }
+
                 SendInboundMessage(Lang("SupplyDropDropped", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position)), configData.alerts.supplyDrop && !HideSupplyAlert(calledDrop));
             });
         }
@@ -231,17 +265,25 @@ namespace Oxide.Plugins
         private HashSet<ulong> landedDrops = new HashSet<ulong>();
         void OnSupplyDropLanded(SupplyDrop drop)
         {
-            if (!initialized || drop == null || landedDrops.Contains(drop.net.ID.Value)) return;
+            if (drop == null || landedDrops.Contains(drop.net.ID.Value)) return;
+
             landedDrops.Add(drop.net.ID.Value);
+
             CalledDrop calledDrop = GetCalledDrop(null, drop);
+
             SendInboundMessage(Lang("SupplyDropLanded_", null, SupplyDropPlayer(calledDrop), Location(drop.transform.position)), configData.alerts.supplyDropLand && !HideSupplyAlert(calledDrop));
         }
 
         void OnEntityKill(SupplyDrop drop)
         {
             if (drop == null) return;
+
             CalledDrop calledDrop = GetCalledDrop(null, drop);
-            if (calledDrop != null) calledDrops.Remove(calledDrop);
+            if (calledDrop != null)
+            {
+                calledDrops.Remove(calledDrop);
+            }
+
             droppedDrops.Remove(drop.net.ID.Value);
             landedDrops.Remove(drop.net.ID.Value);
         }
@@ -256,19 +298,31 @@ namespace Oxide.Plugins
             if (alert)
             {
                 if (configData.notifications.chat)
+                {
                     Server.Broadcast(message, null, chatIconID);
+                }
 
                 if (configData.notifications.popup && PopupNotifications)
+                {
                     PopupNotifications.Call("CreatePopupNotification", msg);
+                }
 
                 if (configData.uiNotify.enabled && UINotify)
+                {
                     SendUINotify(msg);
+                }
 
                 if (configData.discordMessages.enabled && DiscordMessages && webhookURL.Contains("/api/webhooks/"))
+                {
                     SendDiscordMessage(msg);
-            }
-            if (alert || configData.logging.allEvents)
+                }
+
                 LogInboundMessage(msg);
+            }
+            else if (configData.logging.allEvents)
+            {
+                LogInboundMessage(msg);
+            }
         }
 
         void SendUINotify(string msg)
@@ -276,37 +330,46 @@ namespace Oxide.Plugins
             foreach (var player in BasePlayer.activePlayerList)
             {
                 if (permission.UserHasPermission(player.UserIDString, "uinotify.see"))
+                {
                     UINotify.Call("SendNotify", player, configData.uiNotify.type, msg);
+                }
             }
         }
 
-        void SendDiscordMessage(string msg)
+        void SendDiscordMessage(string message)
         {
-            string dMsg = Lang("DiscordMessage_", null, msg);
-            if (string.IsNullOrWhiteSpace(dMsg)) return;
+            string discordMessage = Lang("DiscordMessage_", null, message);
+            if (string.IsNullOrWhiteSpace(discordMessage)) return;
 
             if (configData.discordMessages.embedded)
             {
                 object fields = new[]
                 {
                     new {
-                        name = configData.discordMessages.embedTitle, value = dMsg, inline = false
+                        name = configData.discordMessages.embedTitle, value = discordMessage, inline = false
                     }
                 };
+
                 string json = JsonConvert.SerializeObject(fields);
                 DiscordMessages.Call("API_SendFancyMessage", webhookURL, string.Empty, configData.discordMessages.embedColor, json);
             }
             else
-                DiscordMessages.Call("API_SendTextMessage", webhookURL, dMsg);
+            {
+                DiscordMessages.Call("API_SendTextMessage", webhookURL, discordMessage);
+            }
         }
 
-        void LogInboundMessage(string msg)
+        void LogInboundMessage(string message)
         {
             if (configData.logging.console)
-                Puts(msg);
+            {
+                Puts(message);
+            }
             
             if (configData.logging.file)
-                LogToFile("log", $"[{DateTime.Now.ToString("HH:mm:ss")}] {msg}", this);
+            {
+                LogToFile("log", $"[{DateTime.Now.ToString("HH:mm:ss")}] {message}", this);
+            }
         }
         #endregion
 
@@ -327,31 +390,54 @@ namespace Oxide.Plugins
         {
             var sb = new StringBuilder();
 
-            if (configData.location.showCargoShip)
-                if (IsAtCargoShip(entity)) sb.Append("Cargo Ship");
+            if (configData.location.showCargoShip && IsAtCargoShip(entity))
+            {
+                sb.Append("Cargo Ship");
+            }
 
             if (configData.location.showOilRigs && sb.Length == 0)
             {
-                if (IsAtOilRig(pos)) sb.Append("Oil Rig");
-                else if (IsAtLargeRig(pos)) sb.Append("Large Oil Rig");
+                if (IsAtOilRig(pos))
+                {
+                    sb.Append("Oil Rig");
+                }
+                else if (IsAtLargeRig(pos))
+                {
+                    sb.Append("Large Oil Rig");
+                }
             }
 
-            if (configData.location.showExcavator && !hideExc && sb.Length == 0)
-                if (IsAtExcavator(pos)) sb.Append("The Excavator");
+            if (configData.location.showExcavator && !hideExc && sb.Length == 0 && IsAtExcavator(pos))
+            {
+                sb.Append("The Excavator");
+            }
 
             if (configData.location.showGrid && sb.Length == 0)
             {
-                if (pos.x > gridLeft && (!configData.location.hideOffGrid || !IsOffGrid(pos)))
-                    sb.Append(GetGrid(pos));
+                if (deepSeaManager != null && deepSeaManager.IsOpen() && DeepSeaManager.IsInsideDeepSea(pos)) // In Deep Sea
+                {
+                    if (pos.x > deepSeaGridLeft && (!configData.location.hideOffGrid || !IsOffDeepSeaGrid(pos)))
+                    {
+                        sb.Append($"Deep Sea {GetDeepSeaGrid(pos)}");
+                    }
+                }
+                else // On Main Land
+                {
+                    if (pos.x > gridLeft && (!configData.location.hideOffGrid || !IsOffGrid(pos)))
+                    {
+                        sb.Append(GetMainLandGrid(pos));
+                    }
+                }
             }
 
             if (configData.location.showCoords)
             {
                 bool hideDecimals = configData.location.hideCoordDecimals;
-                string x = hideDecimals ? Mathf.Round(pos.x).ToString()+"," : pos.x.ToString("0.##")+",";
-                string y = hideDecimals ? Mathf.Round(pos.y).ToString()+"," : pos.y.ToString("0.##")+",";
+                bool hideYCoord = configData.location.hideYCoord;
+                
+                string x = hideDecimals ? $"{Mathf.Round(pos.x)}," : pos.x.ToString("0.##") + ",";
+                string y = hideYCoord ? string.Empty : (hideDecimals ? $"{Mathf.Round(pos.y)}," : pos.y.ToString("0.##") + ",");
                 string z = hideDecimals ? Mathf.Round(pos.z).ToString() : pos.z.ToString("0.##");
-                if (configData.location.hideYCoord) y = string.Empty;
 
                 sb.Append(sb.Length == 0 ? x+y+z : $" ({x}{y}{z})");
             }
@@ -359,46 +445,49 @@ namespace Oxide.Plugins
             return sb.ToString();
         }
 
+        string GetGrid(Vector3 pos, float left, float bottom, int areaCellCount, float areaCellSize)
+        {
+            int x = Mathf.FloorToInt((pos.x - left) / areaCellSize);
+            int z = Mathf.FloorToInt((pos.z - bottom) / areaCellSize);
+
+            int num = x + 1;
+            string columnLabel = string.Empty;
+            while (num > 0)
+            {
+                int num2 = (num - 1) % 26;
+                columnLabel = Convert.ToChar(65 + num2) + columnLabel;
+                num = (num - 1) / 26;
+            }
+
+            int row = areaCellCount - 1 - z;
+
+            return $"{columnLabel}{row}";
+        }
+
         string GetHarborLocation(CargoShip cargoShip)
         {
             if (cargoShip.harborIndex != -1 && CargoShip.harbors.Count > cargoShip.harborIndex)
             {
-                var currentHarbor = CargoShip.harbors[cargoShip.harborIndex];
+                CargoShip.HarborInfo currentHarbor = CargoShip.harbors[cargoShip.harborIndex];
                 return Location(currentHarbor.harborTransform.position);
             }
 
             return string.Empty;
         }
 
-        string GetGrid(Vector3 pos)
-        {
-            int x = Mathf.FloorToInt((pos.x + (worldSize / 2)) / cellSize);
-            int z = Mathf.FloorToInt((pos.z + (worldSize / 2)) / cellSize);
+        string GetMainLandGrid(Vector3 pos) => GetGrid(pos, gridLeft, gridBottom, cellCount, cellSize);
 
-            string columnLabel = string.Empty;
-            int num = x / 26;
-
-            if (num > 0)
-            {
-                for (int i = 0; i < num; i++)
-                {
-                    columnLabel += Convert.ToChar(65 + i);
-                }
-            }
-
-            columnLabel += Convert.ToChar(65 + (x % 26));
-
-            int row = cellCount - 1 - z;
-
-            return $"{columnLabel}{row}";
-        }
+        string GetDeepSeaGrid(Vector3 pos) => GetGrid(pos, deepSeaGridLeft, deepSeaGridBottom, deepSeaCellCount, deepSeaCellSize);
 
         private CalledDrop GetCalledDrop(CargoPlane plane, SupplyDrop drop)
         {
             foreach (var calledDrop in calledDrops)
             {
-                if ((plane != null && calledDrop._plane == plane) || (drop != null && calledDrop._drop == drop))
-                    return calledDrop;
+                if ((plane != null && calledDrop._plane == plane) ||
+                    (drop != null && calledDrop._drop == drop))
+                {
+                        return calledDrop;
+                }
             }
             return null;
         }
@@ -421,46 +510,83 @@ namespace Oxide.Plugins
             return (configData.misc.hideCargoCrates && IsAtCargoShip(crate)) || (configData.misc.hideRigCrates && (IsAtOilRig(pos) || IsAtLargeRig(pos)));
         }
 
-        const string filterTags = @"(?i)<\/?(align|alpha|color|cspace|indent|line-height|line-indent|margin|mark|mspace|pos|size|space|voffset|b|i|lowercase|uppercase|smallcaps|s|u|sup|sub)(\s*=[^>]*?)?\s*\/?>";
-        private bool IsAtOilRig(Vector3 pos) => hasOilRig && Vector3Ex.Distance2D(oilRigPos, pos) <= 60f;
-        private bool IsAtLargeRig(Vector3 pos) => hasLargeRig && Vector3Ex.Distance2D(largeRigPos, pos) <= 75f;
+        private bool IsAtOilRig(Vector3 pos)
+        {
+            foreach (Vector3 oilRigPos in oilRigPositions)
+            {
+                if (Vector3Ex.Distance2D(oilRigPos, pos) < 60f) return true;
+            }
+            return false;
+        }
+
+        private bool IsAtLargeRig(Vector3 pos)
+        {
+            foreach (Vector3 largeOilRigPos in largeOilRigPositions)
+            {
+                if (Vector3Ex.Distance2D(largeOilRigPos, pos) < 75f) return true;
+            }
+            return false;
+        }
+
         private bool IsAtCargoShip(BaseEntity entity) => entity?.GetComponentInParent<CargoShip>();
-        private bool IsAtExcavator(Vector3 pos) => hasExcavator && Vector3Ex.Distance2D(excavatorPos, pos) <= 145f;
+
+        private bool IsAtExcavator(Vector3 pos)
+        {
+            foreach (Vector3 excavatorPos in excavatorPositions)
+            {
+                if (Vector3Ex.Distance2D(excavatorPos, pos) < 145f) return true;
+            }
+            return false;
+        }
+
         private bool IsOffGrid(Vector3 pos) => pos.x < gridLeft || pos.x > gridRight || pos.z < gridBottom || pos.z > gridTop;
+
+        private bool IsOffDeepSeaGrid(Vector3 pos) => pos.x < deepSeaGridLeft || pos.x > deepSeaGridRight || pos.z < deepSeaGridBottom || pos.z > deepSeaGridTop;
+
         private bool SupplyPlayerCompatible() => !FancyDrop && !AirdropPrecision;
 
         void InitVariables()
         {
             // Grid
-            worldSize = TerrainMeta.Size.x;
+            float worldSize = TerrainMeta.Size.x;
             cellCount = Mathf.FloorToInt((worldSize * 7) / 1024);
             cellSize = worldSize / cellCount;
 
             gridBottom = TerrainMeta.Position.z;
-            gridTop = gridBottom + (cellSize * cellCount);
+            gridTop = gridBottom + worldSize;
             gridLeft = TerrainMeta.Position.x;
-            gridRight = gridLeft + (cellSize * cellCount);
+            gridRight = gridLeft + worldSize;
+
+            // Deep Sea
+            deepSeaManager = DeepSeaManager.Get(true);
+
+            Bounds deepSeaBounds = DeepSeaManager.DeepSeaBounds;
+            float deepSeaSize = deepSeaBounds.size.x;
+            deepSeaCellCount = Mathf.FloorToInt((deepSeaSize * 7) / 1024);
+            deepSeaCellSize = deepSeaSize / deepSeaCellCount;
+
+            deepSeaGridBottom = deepSeaBounds.min.z;
+            deepSeaGridTop = deepSeaBounds.max.z;
+            deepSeaGridLeft = deepSeaBounds.min.x;
+            deepSeaGridRight = deepSeaBounds.max.x;
 
             // Monuments
             foreach (MonumentInfo monument in TerrainMeta.Path.Monuments)
             {
-                var name = monument.name;
+                string name = monument.name;
                 if (name == "assets/bundled/prefabs/autospawn/monument/large/excavator_1.prefab")
                 {
-                    hasExcavator = true;
-                    excavatorPos = monument.transform.localToWorldMatrix.MultiplyPoint3x4(new Vector3(20f,0,-30f));
+                    excavatorPositions.Add(monument.transform.localToWorldMatrix.MultiplyPoint3x4(new Vector3(20f,0,-30f)));
                     continue;
                 }
                 if (name == "assets/bundled/prefabs/autospawn/monument/offshore/oilrig_1.prefab")
                 {
-                    hasLargeRig = true;
-                    largeRigPos = monument.transform.position;
+                    largeOilRigPositions.Add(monument.transform.position);
                     continue;
                 }
                 if (name == "assets/bundled/prefabs/autospawn/monument/offshore/oilrig_2.prefab")
                 {
-                    hasOilRig = true;
-                    oilRigPos = monument.transform.position;
+                    oilRigPositions.Add(monument.transform.position);
                     continue;
                 }
             }
@@ -469,30 +595,42 @@ namespace Oxide.Plugins
             if (configData.notifications.chat && configData.misc.chatIcon != 0)
             {
                 if (!configData.misc.chatIcon.IsSteamId())
+                {
                     PrintWarning("Chat Icon is not set to a valid SteamID64.");
+                }
                 else
+                {
                     chatIconID = configData.misc.chatIcon;
+                }
             }
 
             if (configData.notifications.popup && !PopupNotifications)
+            {
                 PrintWarning("The 'Popup Notifications' plugin could not be found.");
+            }
 
             if (configData.discordMessages.enabled)
             {
                 webhookURL = configData.discordMessages.webhookURL;
                 if (!DiscordMessages)
+                {
                     PrintWarning("The 'Discord Messages' plugin could not be found.");
+                }
                 else if (!webhookURL.Contains("/api/webhooks/"))
+                {
                     PrintWarning("The 'Discord Messages' Webhook URL is missing or invalid.");
+                }
             }
 
             if (configData.uiNotify.enabled && !UINotify)
+            {
                 PrintWarning("The 'UI Notify' plugin could not be found.");
-
+            }
+            
             if (!SupplyPlayerCompatible() && (configData.misc.showSupplyPlayer || configData.misc.hideCalledSupply || configData.misc.hideRandomSupply))
+            {
                 PrintWarning("The 'Supply Drop Player' options are not currently compatible with Fancy Drop or Aidrop Precision. Using defaults (false).");
-
-            initialized = true;
+            }
         }
         #endregion
 
@@ -562,6 +700,8 @@ namespace Oxide.Plugins
                 public bool bradleyAPC { get; set; }
                 [JsonProperty(PropertyName = "Travelling Vendor Alerts")]
                 public bool travellingVendor { get; set; }
+                [JsonProperty(PropertyName = "Deep Sea Alerts")]
+                public bool deepSea { get; set; }
                 [JsonProperty(PropertyName = "Excavator Activated Alerts")]
                 public bool excavator { get; set; }
                 [JsonProperty(PropertyName = "Excavator Supply Request Alerts")]
@@ -679,6 +819,7 @@ namespace Oxide.Plugins
                     ch47 = true,
                     bradleyAPC = true,
                     travellingVendor = true,
+                    deepSea = true,
                     excavator = true,
                     excavatorSupply = true,
                     hackableCrateSpawn = true,
@@ -759,6 +900,10 @@ namespace Oxide.Plugins
             {
                 configData.alerts.travellingVendor = baseConfig.alerts.travellingVendor;
             }
+            if (configData.Version < new Core.VersionNumber(0, 7, 0))
+            {
+                configData.alerts.deepSea = baseConfig.alerts.deepSea;
+            }
             configData.Version = Version;
             PrintWarning("Config update completed!");
         }
@@ -798,6 +943,7 @@ namespace Oxide.Plugins
                 ["CH47"] = "Chinook inbound{0}{1}",
                 ["BradleyAPC"] = "Bradley APC inbound{0}",
                 ["TravellingVendor"] = "Travelling Vendor inbound{0}",
+                ["DeepSeaOpen"] = "The Deep Sea is now open",
                 ["Excavator_"] = "{0} has activated The Excavator{1}",
                 ["ExcavatorSupplyRequest"] = "{0} has requested a supply drop{1}",
                 ["HackableCrateSpawned"] = "Hackable Crate has spawned{0}",

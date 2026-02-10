@@ -27,6 +27,7 @@
     "CH47 Chinook Alerts": true,
     "Bradley APC Alerts": true,
     "Travelling Vendor Alerts": true,
+    "Deep Sea Alerts": true,
     "Excavator Activated Alerts": true,
     "Excavator Supply Request Alerts": true,
     "Hackable Crate Alerts": true,
@@ -60,8 +61,8 @@
   },
   "Version (Do not modify)": {
     "Major": 0,
-    "Minor": 6,
-    "Patch": 9
+    "Minor": 7,
+    "Patch": 0
   }
 }
 ```
@@ -83,6 +84,7 @@
   "CH47": "Chinook inbound{0}{1}",
   "BradleyAPC": "Bradley APC inbound{0}",
   "TravellingVendor": "Travelling Vendor inbound{0}",
+  "DeepSeaOpen": "The Deep Sea is now open",
   "Excavator_": "{0} has activated The Excavator{1}",
   "ExcavatorSupplyRequest": "{0} has requested a supply drop{1}",
   "HackableCrateSpawned": "Hackable Crate has spawned{0}",
@@ -103,13 +105,3 @@
 
 - The **Show Supply Drop Player**, **Hide Player-Called Supply Drop Messages**, and **Hide Random Supply Drop Messages** options do not currently work with any plugins that kill & respawn the Cargo Plane or Supply Drop. These include Fancy Drop, Airdrop Precision, and possibly others. Compatibility for these can hopefully be added at some point.
 - Unmarked grids to the left of the map will not show, as there is currently no good way of labeling these.
-
-## Credits
-
-- **PaiN** and **Splak**, for originally fulfilling the heli notification request, but in the wrong place. ;)
-- **Tori1157**, for helping maintain the plugin
-- **Wulf**, the original author of this plugin
-
-## Donate
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/F1F8826WW)
