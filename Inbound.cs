@@ -7,10 +7,11 @@ using Oxide.Core.Libraries.Covalence;
 using Oxide.Core.Plugins;
 using Newtonsoft.Json;
 using UnityEngine;
+using HarmonyLib;
 
 namespace Oxide.Plugins
 {
-    [Info("Inbound", "Substrata", "0.7.0")]
+    [Info("Inbound", "Substrata", "0.7.1")]
     [Description("Broadcasts notifications when patrol helicopters, supply drops, cargo ships, etc. are inbound")]
 
     class Inbound : RustPlugin
@@ -19,8 +20,6 @@ namespace Oxide.Plugins
         Plugin DiscordMessages, PopupNotifications, UINotify,
         // Compatibility
         AirdropPrecision, FancyDrop;
-
-        private DeepSeaManager deepSeaManager;
 
         private HashSet<Vector3> oilRigPositions = new HashSet<Vector3>();
         private HashSet<Vector3> largeOilRigPositions = new HashSet<Vector3>();
@@ -126,15 +125,9 @@ namespace Oxide.Plugins
         {
             if (deepSea == null) return;
 
-            deepSeaManager = deepSea;
-
             NextTick(() =>
             {
-                if (deepSea == null)
-                {
-                    deepSeaManager = null;
-                    return;
-                }
+                if (deepSea == null) return;
 
                 if (deepSea.IsOpen())
                 {
@@ -142,8 +135,6 @@ namespace Oxide.Plugins
                 }
             });
         }
-
-        void OnDeepSeaClosed(DeepSeaManager deepSea) => deepSeaManager = null;
 
         void OnExcavatorResourceSet(ExcavatorArm arm, string resourceName, BasePlayer player)
         {
@@ -288,6 +279,88 @@ namespace Oxide.Plugins
             landedDrops.Remove(drop.net.ID.Value);
         }
 
+        // Satellites
+        private Dictionary<ulong, IPlayer> satellites = new Dictionary<ulong, IPlayer>();
+
+        void OnSatelliteLocked(SatelliteControlComputer satelliteComputer, BasePlayer player)
+        {
+            if (satelliteComputer?.net == null || player == null) return;
+
+            SendInboundMessage(Lang("SatelliteRequest", null, player.displayName, Location(satelliteComputer.transform.position)), configData.alerts.satelliteRequest);
+
+            if (configData.alerts.satelliteLaunch || configData.alerts.satelliteCrash)
+            {
+                satellites[satelliteComputer.net.ID.Value] = player.IPlayer;
+            }
+        }
+
+        void OnSatelliteLaunched(SatelliteCrash satellite)
+        {
+            if (satellite == null) return;
+
+            Vector3 crashPos = satellite.crashTarget;
+
+            NextTick(() =>
+            {
+                if (satellite == null) return;
+                SendInboundMessage(Lang("SatelliteLaunched", null, SatelliteOwner(satellite.controlComputerId), Location(satellite.transform.position), Destination(crashPos)), configData.alerts.satelliteLaunch);
+            });
+        }
+
+        void OnSatelliteCrashed(SatelliteCrash satellite)
+        {
+            if (satellite == null) return;
+
+            Vector3 crashPos = satellite.crashTarget;
+
+            SendInboundMessage(Lang("SatelliteCrashed", null, SatelliteOwner(satellite.controlComputerId), Location(crashPos)), configData.alerts.satelliteCrash);
+
+            if (satellite.controlComputerId.IsValid)
+            {
+                satellites.Remove(satellite.controlComputerId.Value);
+            }
+        }
+
+        string SatelliteOwner(NetworkableId computerNetId)
+        {
+            if (computerNetId.IsValid && satellites.TryGetValue(computerNetId.Value, out IPlayer iplayer) && iplayer != null)
+            {
+                return Lang("OwnerPlayer", null, iplayer.Name);
+            }
+
+            return string.Empty;
+        }
+
+        [AutoPatch]
+        [HarmonyPatch(typeof(SatelliteControlComputer), "RPC_LockTrajectory")]
+        static class SatelliteControlComputer_RPC_LockTrajectory_Patch1
+        {
+            public static void Postfix(SatelliteControlComputer __instance, BaseEntity.RPCMessage msg)
+            {
+                Interface.CallHook("OnSatelliteLocked", __instance, msg.player);
+            }
+        }
+
+        [AutoPatch]
+        [HarmonyPatch(typeof(SatelliteCrash), "InitOrbit")]
+        static class SatelliteCrash_InitOrbit_Patch1
+        {
+            public static void Postfix(SatelliteCrash __instance, SatelliteData sat, Vector3 target, NetworkableId computerId)
+            {
+                Interface.CallHook("OnSatelliteLaunched", __instance);
+            }
+        }
+
+        [AutoPatch]
+        [HarmonyPatch(typeof(SatelliteCrash), "PerformCrash")]
+        static class SatelliteCrash_PerformCrash_Patch1
+        {
+            public static void Postfix(SatelliteCrash __instance)
+            {
+                Interface.CallHook("OnSatelliteCrashed", __instance);
+            }
+        }
+
         #region Messages
         void SendInboundMessage(string message, bool alert)
         {
@@ -414,6 +487,8 @@ namespace Oxide.Plugins
 
             if (configData.location.showGrid && sb.Length == 0)
             {
+                DeepSeaManager deepSeaManager = PointEntity<DeepSeaManager>.ServerInstance;
+
                 if (deepSeaManager != null && deepSeaManager.IsOpen() && DeepSeaManager.IsInsideDeepSea(pos)) // In Deep Sea
                 {
                     if (pos.x > deepSeaGridLeft && (!configData.location.hideOffGrid || !IsOffDeepSeaGrid(pos)))
@@ -495,7 +570,7 @@ namespace Oxide.Plugins
         private string SupplyDropPlayer(CalledDrop calledDrop)
         {
             IPlayer iplayer = calledDrop != null ? calledDrop._iplayer : null;
-            return configData.misc.showSupplyPlayer && iplayer != null ? Lang("SupplyDropPlayer", null, iplayer.Name) : string.Empty;
+            return configData.misc.showSupplyPlayer && iplayer != null ? Lang("OwnerPlayer", null, iplayer.Name) : string.Empty;
         }
 
         private bool HideSupplyAlert(CalledDrop calledDrop)
@@ -556,9 +631,6 @@ namespace Oxide.Plugins
             gridTop = gridBottom + worldSize;
             gridLeft = TerrainMeta.Position.x;
             gridRight = gridLeft + worldSize;
-
-            // Deep Sea
-            deepSeaManager = DeepSeaManager.Get(true);
 
             Bounds deepSeaBounds = DeepSeaManager.DeepSeaBounds;
             float deepSeaSize = deepSeaBounds.size.x;
@@ -716,6 +788,12 @@ namespace Oxide.Plugins
                 public bool supplyDrop { get; set; }
                 [JsonProperty(PropertyName = "Supply Drop Landed Alerts")]
                 public bool supplyDropLand { get; set; }
+                [JsonProperty(PropertyName = "Satellite Request Alerts")]
+                public bool satelliteRequest { get; set; }
+                [JsonProperty(PropertyName = "Satellite Launch Alerts")]
+                public bool satelliteLaunch { get; set; }
+                [JsonProperty(PropertyName = "Satellite Crash Alerts")]
+                public bool satelliteCrash { get; set; }
             }
 
             public class Location
@@ -826,7 +904,10 @@ namespace Oxide.Plugins
                     hackingCrate = true,
                     supplySignal = true,
                     supplyDrop = true,
-                    supplyDropLand = true
+                    supplyDropLand = true,
+                    satelliteRequest = true,
+                    satelliteLaunch = true,
+                    satelliteCrash = true
                 },
                 location = new ConfigData.Location
                 {
@@ -904,6 +985,13 @@ namespace Oxide.Plugins
             {
                 configData.alerts.deepSea = baseConfig.alerts.deepSea;
             }
+            if (configData.Version < new Core.VersionNumber(0, 7, 1))
+            {
+                configData.alerts.satelliteRequest = baseConfig.alerts.satelliteRequest;
+                configData.alerts.satelliteCrash = baseConfig.alerts.satelliteCrash;
+                configData.alerts.satelliteLaunch = baseConfig.alerts.satelliteLaunch;
+                BackupLang();
+            }
             configData.Version = Version;
             PrintWarning("Config update completed!");
         }
@@ -951,7 +1039,10 @@ namespace Oxide.Plugins
                 ["SupplySignal"] = "{0} has deployed a supply signal{1}",
                 ["SupplyDropDropped"] = "{0}Supply Drop has dropped{1}",
                 ["SupplyDropLanded_"] = "{0}Supply Drop has landed{1}",
-                ["SupplyDropPlayer"] = "{0}'s ",
+                ["SatelliteRequest"] = "{0} has called in a Satellite{1}",
+                ["SatelliteLaunched"] = "{0}Satellite inbound{2}",
+                ["SatelliteCrashed"] = "{0}Satellite crashed{1}",
+                ["OwnerPlayer"] = "{0}'s ",
                 ["Location"] = " at {0}",
                 ["Destination"] = " and headed to {0}",
                 ["DiscordMessage_"] = "{0}"

@@ -1,4 +1,4 @@
-**Inbound** broadcasts notifications when patrol helicopters, supply drops, hackable crates, cargo ships, Excavator, Bradley, or Chinook are active / inbound.
+**Inbound** broadcasts notifications when patrol helicopters, supply drops, hackable crates, satellites, cargo ships, Excavator, Bradley, or Chinook are active / inbound.
 
 ## Configuration
 
@@ -34,7 +34,10 @@
     "Player Hacking Crate Alerts": true,
     "Supply Signal Alerts": true,
     "Supply Drop Alerts": true,
-    "Supply Drop Landed Alerts": true
+    "Supply Drop Landed Alerts": true,
+    "Satellite Request Alerts": true,
+    "Satellite Launch Alerts": true,
+    "Satellite Crash Alerts": true
   },
   "Location": {
     "Show Grid": true,
@@ -62,7 +65,7 @@
   "Version (Do not modify)": {
     "Major": 0,
     "Minor": 7,
-    "Patch": 0
+    "Patch": 1
   }
 }
 ```
@@ -92,7 +95,10 @@
   "SupplySignal": "{0} has deployed a supply signal{1}",
   "SupplyDropDropped": "{0}Supply Drop has dropped{1}",
   "SupplyDropLanded_": "{0}Supply Drop has landed{1}",
-  "SupplyDropPlayer": "{0}'s ",
+  "SatelliteRequest": "{0} has called in a Satellite{1}",
+  "SatelliteLaunched": "{0}Satellite inbound{2}",
+  "SatelliteCrashed": "{0}Satellite crashed{1}",
+  "OwnerPlayer": "{0}'s ",
   "Location": " at {0}",
   "Destination": " and headed to {0}",
   "DiscordMessage_": "{0}"
